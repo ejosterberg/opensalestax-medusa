@@ -1,0 +1,63 @@
+{
+  "name": "@ejosterberg/medusa-plugin-opensalestax",
+  "version": "0.1.0-alpha.1",
+  "description": "OpenSalesTax tax provider for Medusa v2 — destination-based US sales tax via a self-hosted Apache 2.0 engine.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Eric Osterberg",
+    "email": "ejosterberg@gmail.com"
+  },
+  "homepage": "https://github.com/ejosterberg/opensalestax-medusa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ejosterberg/opensalestax-medusa.git"
+  },
+  "keywords": [
+    "medusa",
+    "medusa-plugin",
+    "medusa-plugin-tax",
+    "tax",
+    "sales-tax",
+    "us-tax",
+    "opensalestax"
+  ],
+  "files": [
+    ".medusa/server",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./providers/*": "./.medusa/server/providers/*/index.js",
+    ".": "./.medusa/server/providers/opensalestax/index.js"
+  },
+  "scripts": {
+    "build": "medusa plugin:build",
+    "dev": "medusa plugin:develop",
+    "prepublishOnly": "medusa plugin:build",
+    "test:unit": "jest --testPathPattern=tests/unit --runInBand --forceExit",
+    "test": "npm run test:unit",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@medusajs/admin-sdk": "2.14.2",
+    "@medusajs/cli": "2.14.2",
+    "@medusajs/framework": "2.14.2",
+    "@medusajs/medusa": "2.14.2",
+    "@medusajs/test-utils": "2.14.2",
+    "@swc/core": "^1.7.28",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "typescript": "^5.6.2"
+  },
+  "peerDependencies": {
+    "@medusajs/framework": "^2.13.0",
+    "@medusajs/medusa": "^2.13.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,2 @@
+# Empty admin folder — the plugin has no admin UI extensions in v0.1, but
+# `medusa plugin:build` requires the directory to exist.
