@@ -3,7 +3,11 @@
 # Publishes to npm on tag push (vN.N.N or vN.N.N-prerelease).
 #
 # Setup (one-time):
-#   1. Generate an npm "Automation" token at npmjs.com → Account → Access Tokens
+#   1. Generate a **Granular Access Token** at npmjs.com → Account → Access Tokens
+#      (Classic "Automation" tokens do NOT bypass 2FA on modern npm accounts.)
+#      - Scope: package "@ejosterberg/medusa-plugin-opensalestax", Read+write
+#      - Expiration: 1 year recommended
+#      - Granular tokens scoped to specific packages bypass 2FA by design
 #   2. Add it as repo secret NPM_TOKEN at
 #      https://github.com/ejosterberg/opensalestax-medusa/settings/secrets/actions
 
