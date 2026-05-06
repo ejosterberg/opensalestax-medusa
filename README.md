@@ -2,7 +2,7 @@
 
 > Replace TaxJar / Avalara with self-hosted [OpenSalesTax](https://github.com/ejosterberg/open-sales-tax). Free, open-source, US sales-tax calculation for Medusa v2.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE) [![Medusa](https://img.shields.io/badge/medusa-v2.13%2B-purple)](package.json) [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](package.json)
+[![npm](https://img.shields.io/npm/v/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![npm downloads](https://img.shields.io/npm/dm/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE) [![Medusa](https://img.shields.io/badge/medusa-v2.13%2B-purple)](package.json) [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](package.json)
 
 **Status:** v0.1.0. Tested against Medusa v2.14.2 + OpenSalesTax engine v0.54. 17 unit tests + a live-engine smoke test + a live-Medusa integration test (provider registers in the Tax Module, gets bound to a US tax region, and returns 6 jurisdictions summing to 9.025% for a ZIP 55401 / $100 cart).
 
