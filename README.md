@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![npm downloads](https://img.shields.io/npm/dm/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE) [![Medusa](https://img.shields.io/badge/medusa-v2.13%2B-purple)](package.json) [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](package.json)
 
-**Status:** v0.1.0. Tested against Medusa v2.14.2 + OpenSalesTax engine v0.54. 17 unit tests + a live-engine smoke test + a live-Medusa integration test (provider registers in the Tax Module, gets bound to a US tax region, and returns 6 jurisdictions summing to 9.025% for a ZIP 55401 / $100 cart).
+**Status:** v0.2.0. Tested against Medusa v2.14.2 + OpenSalesTax engine v0.54. **30 unit tests** + live smoke test + live Medusa integration test on a Proxmox VM. v0.2 adds **caching** (~1600x faster on repeat calls during checkout) and **shipping-line tax** (default `general` category, configurable, opt-out-able).
 
 ## What this saves you
 
@@ -61,6 +61,14 @@ module.exports = defineConfig({
                 "ptyp_giftcards":  "",
               },
 
+              // v0.2: shipping-line tax. Defaults to "general"; set to ""
+              // to skip shipping tax entirely; or pick another OST category.
+              shippingCategory: "general",
+
+              // v0.2: cache TTL in seconds. Default 60. Set to 0 to disable.
+              // Cache uses Medusa's ICacheService from the container.
+              cacheTtlSeconds: 60,
+
               timeoutMs: 5000, // optional, default 5000
             },
           },
@@ -113,12 +121,16 @@ If the engine is unreachable, returns 5xx, or times out, the provider logs the e
 
 You should monitor your engine's uptime independently. The companion engine project ships with a `/v1/health` endpoint and a Docker healthcheck.
 
-## What's NOT in v0.1.0
+## What's new in v0.2.0
 
-- **Caching.** Medusa calls `getTaxLines` on every cart-totals recompute. For high-traffic stores, wrap the provider in Medusa's `ICacheService` (60s TTL is reasonable). Planned for v0.2.
-- **Shipping tax.** Some US states tax shipping at the destination's general rate; others don't. The current provider returns `[]` for shipping lines. Planned for v0.2 once the engine surfaces a shipping-specific category.
-- **Refund handling.** WC connector has refund proration; the Medusa equivalent isn't implemented yet because Medusa's return/refund flow has its own tax handling. Planned for v0.2.
-- **Automated CI integration test using `@medusajs/test-utils`'s `moduleIntegrationTestRunner`.** The plugin's verified end-to-end against a real Medusa instance manually; turning that into a CI-runnable Jest suite is planned for v0.2.
+- ✅ **Caching wrap.** Engine responses are cached under a content-addressed key with a configurable TTL (default 60s). The realistic checkout pattern — customer types ZIP, Medusa recomputes cart totals 5 times — now produces 1 engine call instead of 5. Verified ~1600x speedup on repeat calls in our live test (1603ms → 0ms). Cache uses Medusa's `ICacheService` if registered; degrades gracefully to no-cache if the host hasn't configured one.
+- ✅ **Shipping-line tax.** Provider now sends shipping lines through the engine alongside item lines. Configurable via the `shippingCategory` option: defaults to `"general"`, set to `""` to skip shipping tax entirely, or pick any of the 6 OST categories. Returned as `ShippingTaxLineDTO` so Medusa renders shipping tax distinctly in the order summary.
+
+## What's NOT yet shipping (planned for v0.3+)
+
+- **Refund / return tax integration.** Medusa's return flow has its own tax path; we don't yet capture per-order breakdown for refund proration. (The WooCommerce sibling connector ships this in its v0.3 + v0.4.1.)
+- **Automated CI integration test using `moduleIntegrationTestRunner`.** Turning the manual VM-based integration test into a CI-runnable Jest suite requires a Postgres service container in the GitHub Actions matrix. Designed but deferred.
+- **Per-order breakdown storage.** Like the WooCommerce connector's per-order audit table; needs research into Medusa's order-meta patterns.
 
 ## Compatibility
 

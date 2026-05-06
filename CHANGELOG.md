@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-05
+
+### Added
+
+- **Caching wrap.** `OpenSalesTaxProvider` now accepts `cache: ICacheService` from the Medusa Awilix container (registered under `Modules.CACHE = "cache"`) and wraps every engine call in a content-addressed cache. Default TTL: 60 seconds, configurable via the `cacheTtlSeconds` plugin option (set to `0` to disable). Cache key is `opensalestax:v1:{zip5}:{sha1(canonical-payload)}` so any change to ZIP / categories / amounts produces a new key, and the prefix lets us invalidate everything in a future release. **Verified end-to-end on VM 909:** call 1 = 1603ms engine round-trip, call 2 with identical input = 0ms cache hit. ~1600x speedup on repeat calls — exactly the pattern Medusa generates as a customer types their address into checkout.
+- **Shipping-line tax.** Provider now sends shipping lines through the engine alongside item lines in the same batched request. New `shippingCategory` plugin option (default `"general"`; set to `""` to opt out of shipping tax entirely; set to any of the 6 valid OST categories to override). Shipping tax lines are returned as `ShippingTaxLineDTO` (carrying `shipping_line_id`) so Medusa renders them as their own line in the order summary, distinct from item tax. **Verified end-to-end on VM 909:** $100 item + $10 shipping in MN → 6 item tax lines + 6 shipping tax lines (12 total).
+- 13 new unit tests: shipping tax flow (4), shipping opt-out, invalid shippingCategory fallback, cache hit/miss/key-determinism (4), cacheTtlSeconds=0 disables cache, no-cache-module graceful degradation, cache.get throws, cache.set throws.
+
+### Changed
+
+- `OpenSalesTaxProvider`'s constructor deps now optionally accepts `cache: ICacheService`. The deps shape was `{ logger? }`; it's now `{ logger?, cache? }`. Both are optional — provider degrades gracefully if either is missing (no cache → every call hits engine; no logger → silent operation).
+- `getTaxLines()`'s second parameter (`shippingLines`) is now consumed instead of being ignored. Behavior change: stores that previously got `[]` for shipping tax now get correct destination-based shipping tax. If you want the v0.1 behavior, set `shippingCategory: ""` in your provider options.
+- The static method `OpenSalesTaxProvider.jurisdictionToTaxLine(j, lineItemId)` signature changed to `jurisdictionToTaxLine(j, entry)` where `entry` is a discriminated union of `{ kind: 'item' | 'shipping', medusaId, category, amountStr }`. This is mostly internal — only callers using this static helper directly need to update. The published `getTaxLines` API is unchanged.
+
+### Verified end-to-end
+
+On Proxmox VM 909 (medusa-test, 10.32.161.168, Medusa v2.14.2 + engine v0.54):
+
+- Plugin v0.2.0 tarball installed via `npm install` cleanly
+- Medusa restarts clean; provider still registers as `tp_opensalestax_opensalestax` with `is_enabled: true`
+- Cache test: ZIP 55401 / $100 cart, two identical calls — 1603ms then 0ms
+- Shipping test: ZIP 55401 / $100 item + $10 shipping → 12 tax lines (6 jurisdictions × 2 line types)
+- Opt-out test: same cart with `shippingCategory: ""` → 6 tax lines (item only, shipping correctly suppressed)
+
+### Known limitations / planned for v0.3
+
+- **No automated CI integration test using `moduleIntegrationTestRunner`.** Adding it requires a Postgres service container in the GitHub Actions matrix; designed but deferred to v0.3 to keep this release focused.
+- **Per-order breakdown storage / refund proration.** The WooCommerce sibling connector stores per-order jurisdiction breakdowns and prorates them on refunds (its v0.3.0 + v0.4.1 features). The Medusa equivalent requires research into Medusa's order-meta and return-flow patterns; deferred.
+
 ## [0.1.0] — 2026-05-05
 
 ### Verified

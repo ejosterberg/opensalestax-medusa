@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { createHash } from 'node:crypto';
+
 import type {
+  ICacheService,
   ITaxProvider,
   Logger,
   ItemTaxCalculationLine,
@@ -11,7 +14,7 @@ import type {
 } from '@medusajs/framework/types';
 
 import { OpenSalesTaxClient, OpenSalesTaxApiError } from './client';
-import type { CalculatedLine, CalculateRequest, JurisdictionRate } from './client';
+import type { CalculatedLine, CalculateRequest, CalculateResponse, JurisdictionRate } from './client';
 
 /**
  * Plugin options as passed via medusa-config.ts.
@@ -29,7 +32,9 @@ import type { CalculatedLine, CalculateRequest, JurisdictionRate } from './clien
  *         "ptyp_groceries":  "groceries",
  *         "ptyp_giftcards":  "",                       // empty = non-taxable
  *       },
- *       timeoutMs: 5000                                // optional, default 5000
+ *       shippingCategory: "general",                   // v0.2: shipping category, "" to skip
+ *       timeoutMs: 5000,                               // optional, default 5000
+ *       cacheTtlSeconds: 60,                           // v0.2: cache TTL, 0 to disable
  *     }
  *   }
  */
@@ -38,7 +43,11 @@ export interface OpenSalesTaxProviderOptions {
   apiKey?: string;
   defaultCategory?: string;
   categoryByProductTypeId?: Record<string, string>;
+  /** v0.2: OST category for shipping lines. Default `"general"`. Empty string skips. */
+  shippingCategory?: string;
   timeoutMs?: number;
+  /** v0.2: cache TTL in seconds. Default 60. Set to 0 to disable caching. */
+  cacheTtlSeconds?: number;
 }
 
 /** Six categories the OpenSalesTax engine accepts. Empty string = non-taxable. */
@@ -52,12 +61,27 @@ const VALID_CATEGORIES = new Set([
 ]);
 
 const DEFAULT_CATEGORY = 'general';
+const DEFAULT_SHIPPING_CATEGORY = 'general';
+const DEFAULT_CACHE_TTL_SECONDS = 60;
 const SUPPORTED_COUNTRY = 'US';
 const SUPPORTED_CURRENCY = 'usd';
+const CACHE_KEY_PREFIX = 'opensalestax:v1';
 
 interface InjectedDeps {
   logger?: Logger;
+  /**
+   * Medusa's Cache module, registered as `cache` in the Awilix container
+   * (matches `Modules.CACHE`). Optional — if the host app hasn't configured
+   * a cache module the provider degrades to no-cache (every call hits the
+   * engine) but still functions correctly.
+   */
+  cache?: ICacheService;
 }
+
+/** Internal: a Medusa line + its resolved OST category, ready to send to the engine. */
+type TaxableEntry =
+  | { kind: 'item'; medusaId: string; category: string; amountStr: string }
+  | { kind: 'shipping'; medusaId: string; category: string; amountStr: string };
 
 /**
  * OpenSalesTax tax provider for Medusa v2.
@@ -68,26 +92,37 @@ interface InjectedDeps {
  *   2. Maps Medusa's `product_type_id` to one of the OST engine's 6 tax
  *      categories via the `categoryByProductTypeId` option (with a
  *      configurable default for unmapped types).
- *   3. Calls `POST /v1/calculate` with all taxable lines in a single batch.
- *   4. Returns one ItemTaxLineDTO per (line × jurisdiction) so Medusa shows
- *      the per-state/county/city/district breakdown in the order summary.
+ *   3. Sends item AND shipping lines through the engine in a single batch.
+ *      Shipping lines use the `shippingCategory` option (default `"general"`).
+ *   4. Caches the engine response under a content-addressed key (60s TTL by
+ *      default) so the typical "customer types ZIP, Medusa recomputes cart
+ *      totals 5 times" pattern hits the engine once, not five times.
+ *   5. Returns one tax line per (Medusa line × jurisdiction) so the order
+ *      summary shows the full state/county/city/district breakdown.
  *
- * Shipping tax is intentionally NOT computed in v0.1 — most US states tax
- * shipping at the destination's general rate, but the rules are non-trivial
- * (some states exempt shipping when separately stated, others tax it
- * proportionally to taxable items only). v0.2 will add shipping handling
- * once the engine surfaces a shipping-specific category.
+ * Caching uses Medusa's `ICacheService` from the container under
+ * `Modules.CACHE` ("cache"). The key is content-addressed:
+ *   `opensalestax:v1:{zip5}:{sha1(canonical-payload-json)}`
+ * so any change to the inputs (ZIP, line categories, line amounts) produces
+ * a new key. Bumping the prefix invalidates all cached entries.
  *
- * Caching: NOT implemented in v0.1. Medusa calls `getTaxLines` on every
- * cart-totals recompute; for high-traffic stores this should be wrapped
- * in a short-TTL cache (Medusa's ICacheService via DI, ~60s). v0.2.
+ * If no cache module is registered (host app didn't configure one), the
+ * provider gracefully no-ops the cache layer and every call hits the engine.
+ *
+ * v0.2 limitations (planned for later):
+ *   - Refund / return tax integration. Medusa's return flow has its own tax
+ *     path; we don't yet capture per-order breakdown for refund proration.
  */
 export class OpenSalesTaxProvider implements ITaxProvider {
   static readonly identifier = 'opensalestax';
 
   private readonly logger: Logger | undefined;
+  private readonly cache: ICacheService | undefined;
   private readonly client: OpenSalesTaxClient;
-  private readonly options: OpenSalesTaxProviderOptions;
+  private readonly options: Required<Omit<OpenSalesTaxProviderOptions, 'apiKey' | 'categoryByProductTypeId'>> & {
+    apiKey?: string;
+    categoryByProductTypeId: Record<string, string>;
+  };
 
   constructor(deps: InjectedDeps, options: OpenSalesTaxProviderOptions) {
     if (!options || typeof options.apiBaseUrl !== 'string' || options.apiBaseUrl.trim() === '') {
@@ -97,16 +132,20 @@ export class OpenSalesTaxProvider implements ITaxProvider {
       );
     }
     this.logger = deps.logger;
+    this.cache = deps.cache;
     this.options = {
-      defaultCategory: DEFAULT_CATEGORY,
-      categoryByProductTypeId: {},
-      timeoutMs: 5000,
-      ...options,
+      apiBaseUrl: options.apiBaseUrl,
+      apiKey: options.apiKey,
+      defaultCategory: options.defaultCategory ?? DEFAULT_CATEGORY,
+      categoryByProductTypeId: options.categoryByProductTypeId ?? {},
+      shippingCategory: options.shippingCategory ?? DEFAULT_SHIPPING_CATEGORY,
+      timeoutMs: options.timeoutMs ?? 5000,
+      cacheTtlSeconds: options.cacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS,
     };
     this.client = new OpenSalesTaxClient({
       baseUrl: this.options.apiBaseUrl,
       apiKey: this.options.apiKey,
-      timeoutMs: this.options.timeoutMs ?? 5000,
+      timeoutMs: this.options.timeoutMs,
     });
   }
 
@@ -116,7 +155,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
 
   async getTaxLines(
     itemLines: ItemTaxCalculationLine[],
-    _shippingLines: ShippingTaxCalculationLine[],
+    shippingLines: ShippingTaxCalculationLine[],
     context: TaxCalculationContext,
   ): Promise<(ItemTaxLineDTO | ShippingTaxLineDTO)[]> {
     // Country gate — engine is US-only.
@@ -131,51 +170,50 @@ export class OpenSalesTaxProvider implements ITaxProvider {
       return [];
     }
 
-    // Build the engine payload. Each Medusa item maps to an OST line.
-    // We pass the line index as the engine's "id" so we can correlate
-    // the response back to Medusa's line_item_id without a second loop.
-    const taxableLines: Array<{ idx: number; medusaLine: ItemTaxCalculationLine; category: string }> = [];
-    for (let i = 0; i < itemLines.length; i++) {
-      const line = itemLines[i];
-      if (line === undefined) {
-        continue;
+    // Build the engine payload across BOTH item lines and shipping lines.
+    const taxable: TaxableEntry[] = [];
+    for (const line of itemLines) {
+      const entry = this.resolveItemEntry(line);
+      if (entry !== null) {
+        taxable.push(entry);
       }
-      const currency = line.line_item.currency_code?.toLowerCase();
-      if (currency !== undefined && currency !== SUPPORTED_CURRENCY) {
-        continue; // non-USD line; engine doesn't handle it
+    }
+    for (const line of shippingLines) {
+      const entry = this.resolveShippingEntry(line);
+      if (entry !== null) {
+        taxable.push(entry);
       }
-      const category = this.resolveCategory(line);
-      if (category === '') {
-        continue; // explicitly non-taxable
-      }
-      taxableLines.push({ idx: i, medusaLine: line, category });
     }
 
-    if (taxableLines.length === 0) {
+    if (taxable.length === 0) {
       return [];
     }
 
     const request: CalculateRequest = {
       address: { zip5 },
-      line_items: taxableLines.map((l) => ({
-        amount: OpenSalesTaxProvider.unitAmount(l.medusaLine),
-        category: l.category,
-      })),
+      line_items: taxable.map((t) => ({ amount: t.amountStr, category: t.category })),
     };
 
-    let response;
+    // Try cache first.
+    const cacheKey = OpenSalesTaxProvider.buildCacheKey(zip5, taxable);
+    const cached = await this.cacheGet(cacheKey);
+    if (cached !== null) {
+      return OpenSalesTaxProvider.mapResponseToTaxLines(cached.lines, taxable);
+    }
+
+    let response: CalculateResponse;
     try {
       response = await this.client.calculate(request);
     } catch (err) {
       const message = err instanceof OpenSalesTaxApiError ? err.message : String(err);
       this.logger?.error?.(`[opensalestax] calculate failed: ${message}`);
       // Return [] — Medusa surfaces thrown errors to the customer mid-checkout.
-      // A failed engine call should fail-soft to "no tax line" rather than
-      // blocking checkout.
       return [];
     }
 
-    return OpenSalesTaxProvider.mapResponseToTaxLines(response.lines, taxableLines);
+    await this.cacheSet(cacheKey, response);
+
+    return OpenSalesTaxProvider.mapResponseToTaxLines(response.lines, taxable);
   }
 
   /** Extract a 5-digit US ZIP from a postal_code string, or null if not parseable. */
@@ -187,9 +225,50 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     return digits.length >= 5 ? digits.slice(0, 5) : null;
   }
 
+  private resolveItemEntry(line: ItemTaxCalculationLine): TaxableEntry | null {
+    const currency = line.line_item.currency_code?.toLowerCase();
+    if (currency !== undefined && currency !== SUPPORTED_CURRENCY) {
+      return null;
+    }
+    const category = this.resolveCategory(line);
+    if (category === '') {
+      return null;
+    }
+    return {
+      kind: 'item',
+      medusaId: line.line_item.id,
+      category,
+      amountStr: OpenSalesTaxProvider.unitAmount(line),
+    };
+  }
+
+  private resolveShippingEntry(line: ShippingTaxCalculationLine): TaxableEntry | null {
+    const currency = line.shipping_line.currency_code?.toLowerCase();
+    if (currency !== undefined && currency !== SUPPORTED_CURRENCY) {
+      return null;
+    }
+    const category = this.options.shippingCategory;
+    if (category === '') {
+      return null; // merchant explicitly opted out of shipping tax
+    }
+    if (!VALID_CATEGORIES.has(category)) {
+      this.logger?.warn?.(
+        `[opensalestax] shippingCategory "${category}" is not a valid OST category; ` +
+          `falling back to "general".`,
+      );
+    }
+    const safeCategory = VALID_CATEGORIES.has(category) ? category : DEFAULT_SHIPPING_CATEGORY;
+    return {
+      kind: 'shipping',
+      medusaId: line.shipping_line.id,
+      category: safeCategory,
+      amountStr: OpenSalesTaxProvider.shippingAmount(line),
+    };
+  }
+
   /** Map a single Medusa line to a 6-category OST category via merchant-configured options. */
   private resolveCategory(line: ItemTaxCalculationLine): string {
-    const map = this.options.categoryByProductTypeId ?? {};
+    const map = this.options.categoryByProductTypeId;
     const productTypeId = line.line_item.product_type_id;
     if (typeof productTypeId === 'string' && productTypeId in map) {
       const mapped = map[productTypeId];
@@ -204,16 +283,13 @@ export class OpenSalesTaxProvider implements ITaxProvider {
         );
       }
     }
-    const fallback = this.options.defaultCategory ?? DEFAULT_CATEGORY;
+    const fallback = this.options.defaultCategory;
     return VALID_CATEGORIES.has(fallback) ? fallback : DEFAULT_CATEGORY;
   }
 
-  /** Compute the pre-tax unit amount for one Medusa line, formatted as the engine expects. */
+  /** Compute the pre-tax unit amount for one Medusa item line, formatted as the engine expects. */
   static unitAmount(line: ItemTaxCalculationLine): string {
     const lineItem = line.line_item;
-    // `unit_price` is the canonical pre-tax price per unit. `quantity` defaults
-    // to 1 if the line type doesn't track it (Medusa's TaxableItemDTO marks
-    // both as optional but in practice they're populated for cart items).
     const unitPriceRaw = (lineItem as { unit_price?: number | string | null }).unit_price ?? 0;
     const quantityRaw = (lineItem as { quantity?: number | string | null }).quantity ?? 1;
     const unitPrice = typeof unitPriceRaw === 'string' ? parseFloat(unitPriceRaw) : Number(unitPriceRaw);
@@ -222,42 +298,99 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     return total.toFixed(2);
   }
 
+  /** Compute the shipping amount for one Medusa shipping line. */
+  static shippingAmount(line: ShippingTaxCalculationLine): string {
+    const sl = line.shipping_line as { unit_price?: number | string | null };
+    const raw = sl.unit_price ?? 0;
+    const value = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+    return (Number.isFinite(value) ? value : 0).toFixed(2);
+  }
+
   /**
    * Convert engine response lines into Medusa tax lines, one per
-   * (input-line × jurisdiction). Multiple jurisdictions per item is
-   * intentional — Medusa sums them and shows the per-jurisdiction breakdown
-   * in the order summary, mirroring the OpenSalesTax audit panel.
+   * (Medusa-line × jurisdiction). For shipping lines the DTO carries
+   * `shipping_line_id`; for item lines, `line_item_id`.
    */
   static mapResponseToTaxLines(
     engineLines: CalculatedLine[],
-    taxableLines: Array<{ idx: number; medusaLine: ItemTaxCalculationLine; category: string }>,
-  ): ItemTaxLineDTO[] {
-    const out: ItemTaxLineDTO[] = [];
-    // Engine returns lines in the same order we sent them.
+    taxable: TaxableEntry[],
+  ): (ItemTaxLineDTO | ShippingTaxLineDTO)[] {
+    const out: (ItemTaxLineDTO | ShippingTaxLineDTO)[] = [];
     for (let i = 0; i < engineLines.length; i++) {
       const engineLine = engineLines[i];
-      const taxable = taxableLines[i];
-      if (engineLine === undefined || taxable === undefined) {
+      const entry = taxable[i];
+      if (engineLine === undefined || entry === undefined) {
         continue;
       }
-      const lineItemId = taxable.medusaLine.line_item.id;
       for (const j of engineLine.jurisdictions) {
-        out.push(OpenSalesTaxProvider.jurisdictionToTaxLine(j, lineItemId));
+        out.push(OpenSalesTaxProvider.jurisdictionToTaxLine(j, entry));
       }
     }
     return out;
   }
 
-  static jurisdictionToTaxLine(j: JurisdictionRate, lineItemId: string): ItemTaxLineDTO {
+  static jurisdictionToTaxLine(j: JurisdictionRate, entry: TaxableEntry): ItemTaxLineDTO | ShippingTaxLineDTO {
     const ratePct = parseFloat(j.rate_pct);
-    return {
-      line_item_id: lineItemId,
+    const base = {
       // Medusa's `rate` is a percentage (9.75 = 9.75%, NOT 0.0975).
       rate: Number.isFinite(ratePct) ? ratePct : 0,
       name: `${OpenSalesTaxProvider.titleCaseType(j.type)}: ${j.name}`,
       code: `OST-${j.type.toUpperCase()}-${OpenSalesTaxProvider.slug(j.name)}`,
       provider_id: OpenSalesTaxProvider.identifier,
     };
+    if (entry.kind === 'shipping') {
+      return { ...base, shipping_line_id: entry.medusaId };
+    }
+    return { ...base, line_item_id: entry.medusaId };
+  }
+
+  /**
+   * Content-address the cache key on (zip5 × ordered taxable entries).
+   * Any change to inputs produces a new key. Versioning prefix lets us
+   * invalidate everything by bumping the prefix in a future release.
+   */
+  static buildCacheKey(zip5: string, taxable: TaxableEntry[]): string {
+    // Sort entries to make the key deterministic regardless of input order.
+    const canonical = [...taxable]
+      .sort((a, b) => {
+        if (a.kind !== b.kind) {
+          return a.kind < b.kind ? -1 : 1;
+        }
+        if (a.medusaId !== b.medusaId) {
+          return a.medusaId < b.medusaId ? -1 : 1;
+        }
+        return 0;
+      })
+      .map((t) => `${t.kind}|${t.medusaId}|${t.category}|${t.amountStr}`)
+      .join(';');
+    const hash = createHash('sha1').update(canonical).digest('hex');
+    return `${CACHE_KEY_PREFIX}:${zip5}:${hash}`;
+  }
+
+  private async cacheGet(key: string): Promise<CalculateResponse | null> {
+    if (!this.cache || this.options.cacheTtlSeconds <= 0) {
+      return null;
+    }
+    try {
+      const got = await this.cache.get<CalculateResponse>(key);
+      return got ?? null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger?.warn?.(`[opensalestax] cache.get failed (continuing): ${message}`);
+      return null;
+    }
+  }
+
+  private async cacheSet(key: string, value: CalculateResponse): Promise<void> {
+    if (!this.cache || this.options.cacheTtlSeconds <= 0) {
+      return;
+    }
+    try {
+      await this.cache.set(key, value, this.options.cacheTtlSeconds);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger?.warn?.(`[opensalestax] cache.set failed (continuing): ${message}`);
+    }
   }
 
   private static titleCaseType(type: string): string {
