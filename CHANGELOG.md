@@ -6,6 +6,21 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-05-05
+
+### Verified
+- Live integration test passed against a real Medusa v2.14.2 instance (Proxmox VM 909, `medusa-test`):
+  - Plugin tarball installed via `npm install` into the Medusa app's `node_modules`
+  - `medusa-config.ts` registered the provider under the Tax Module's `providers` array
+  - `systemctl restart medusa` reloaded clean — zero errors in the startup log
+  - `GET /admin/tax-providers` (admin-authenticated) lists `tp_opensalestax_opensalestax` with `is_enabled: true`
+  - US tax region created via `POST /admin/tax-regions` and bound to the provider successfully
+  - Provider's `getTaxLines()` invoked from inside the Medusa app's working directory returned 6 jurisdictions for ZIP 55401 / $100 USD, summing to exactly 9.025% — matches the WooCommerce connector's verified calculation against the same engine
+- The `0.1.0-alpha.1` tag was held by exactly this integration test; now released.
+
+### No code changes from 0.1.0-alpha.1
+- This is a tag bump only — the `.tgz` published as 0.1.0-alpha.1 is byte-identical to 0.1.0 except for the `version` field. The integration test passed against the alpha tarball; no implementation changes were necessary.
+
 ## [0.1.0-alpha.1] — 2026-05-05
 
 ### Added

@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE) [![Medusa](https://img.shields.io/badge/medusa-v2.13%2B-purple)](package.json) [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](package.json)
 
-**Status:** v0.1.0-alpha. Tested against Medusa v2.14.2 + OpenSalesTax engine v0.39. 17 unit tests + a live-engine smoke test. Integration testing against a running Medusa instance is in flight.
+**Status:** v0.1.0. Tested against Medusa v2.14.2 + OpenSalesTax engine v0.54. 17 unit tests + a live-engine smoke test + a live-Medusa integration test (provider registers in the Tax Module, gets bound to a US tax region, and returns 6 jurisdictions summing to 9.025% for a ZIP 55401 / $100 cart).
 
 ## What this saves you
 
@@ -113,12 +113,12 @@ If the engine is unreachable, returns 5xx, or times out, the provider logs the e
 
 You should monitor your engine's uptime independently. The companion engine project ships with a `/v1/health` endpoint and a Docker healthcheck.
 
-## What's NOT in v0.1.0-alpha
+## What's NOT in v0.1.0
 
 - **Caching.** Medusa calls `getTaxLines` on every cart-totals recompute. For high-traffic stores, wrap the provider in Medusa's `ICacheService` (60s TTL is reasonable). Planned for v0.2.
 - **Shipping tax.** Some US states tax shipping at the destination's general rate; others don't. The current provider returns `[]` for shipping lines. Planned for v0.2 once the engine surfaces a shipping-specific category.
-- **Live integration test against a running Medusa instance.** The 17 unit tests cover every code path; the smoke test confirms engine round-trips work. A dedicated Medusa integration test (using `@medusajs/test-utils`) is in flight.
-- **Refund handling.** WC connector has refund proration; the Medusa equivalent isn't implemented yet because Medusa's return/refund flow has its own tax handling. Planned for v0.2 once we've validated the integration test pattern.
+- **Refund handling.** WC connector has refund proration; the Medusa equivalent isn't implemented yet because Medusa's return/refund flow has its own tax handling. Planned for v0.2.
+- **Automated CI integration test using `@medusajs/test-utils`'s `moduleIntegrationTestRunner`.** The plugin's verified end-to-end against a real Medusa instance manually; turning that into a CI-runnable Jest suite is planned for v0.2.
 
 ## Compatibility
 
