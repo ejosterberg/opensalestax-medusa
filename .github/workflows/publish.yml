@@ -2,14 +2,27 @@
 #
 # Publishes to npm on tag push (vN.N.N or vN.N.N-prerelease).
 #
-# Setup (one-time):
-#   1. Generate a **Granular Access Token** at npmjs.com → Account → Access Tokens
-#      (Classic "Automation" tokens do NOT bypass 2FA on modern npm accounts.)
-#      - Scope: package "@ejosterberg/medusa-plugin-opensalestax", Read+write
-#      - Expiration: 1 year recommended
-#      - Granular tokens scoped to specific packages bypass 2FA by design
-#   2. Add it as repo secret NPM_TOKEN at
-#      https://github.com/ejosterberg/opensalestax-medusa/settings/secrets/actions
+# Auth: Trusted Publishing via OIDC — no long-lived NPM_TOKEN secret.
+# The publish is cryptographically tied to this exact workflow file in
+# this exact repo, and npm verifies via OIDC at publish time.
+#
+# Setup (one-time, configure on npm AFTER the first manual publish):
+#   1. Go to:
+#      https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax/access
+#   2. Add a Trusted Publisher:
+#        Provider:        GitHub Actions
+#        Repository owner: ejosterberg
+#        Repository name:  opensalestax-medusa
+#        Workflow file:    publish.yml
+#        Environment:      (optional — set to "release" for extra hardening)
+#   3. That's it. No token to manage, no expiration, no rotation.
+#
+# Why this is preferred over granular access tokens:
+#   - No secret stored in GitHub repo settings (nothing to leak)
+#   - Tied to this specific workflow file — a malicious commit rewriting
+#     the workflow would break the OIDC handshake
+#   - Auto-provenance attestations on the published package (green badge
+#     on the npm registry page proves the build came from this repo)
 
 name: Publish
 
@@ -22,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write   # required for OIDC handshake with npm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,7 +46,5 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npx tsc --noEmit
       - run: npx jest
-      - name: Publish to npm
+      - name: Publish to npm (Trusted Publishing)
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
