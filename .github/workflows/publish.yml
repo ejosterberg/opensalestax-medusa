@@ -1,57 +1,70 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Publishes to npm on tag push (vN.N.N or vN.N.N-prerelease).
+# Publishes the Medusa tax provider plugin to NPM on tag push.
 #
-# Auth: Trusted Publishing via OIDC — no long-lived NPM_TOKEN secret.
+# Auth: NPM Trusted Publishing (OIDC). No long-lived NPM_TOKEN secret.
 # The publish is cryptographically tied to this exact workflow file in
-# this exact repo, and npm verifies via OIDC at publish time.
+# this exact repo + environment, and npm verifies via OIDC at publish time.
 #
 # Setup (one-time, configure on npm AFTER the first manual publish):
-#   1. Go to:
-#      https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax/access
-#   2. Add a Trusted Publisher:
-#        Provider:        GitHub Actions
-#        Repository owner: ejosterberg
-#        Repository name:  opensalestax-medusa
-#        Workflow file:    publish.yml
-#        Environment:      (optional — set to "release" for extra hardening)
-#   3. That's it. No token to manage, no expiration, no rotation.
+#   1. https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax/access
+#      → Trusted Publisher → Add → GitHub Actions
+#        Organization or user: ejosterberg
+#        Repository:           opensalestax-medusa
+#        Workflow filename:    publish.yml
+#        Environment name:     npm-publish
+#   2. GitHub Environment:
+#      https://github.com/ejosterberg/opensalestax-medusa/settings/environments
+#      New environment → name: npm-publish (no protection rules required)
 #
-# Why this is preferred over granular access tokens:
-#   - No secret stored in GitHub repo settings (nothing to leak)
-#   - Tied to this specific workflow file — a malicious commit rewriting
-#     the workflow would break the OIDC handshake
-#   - Auto-provenance attestations on the published package (green badge
-#     on the npm registry page proves the build came from this repo)
+# See ~/.claude/npm-trusted-publishing-playbook.md for setup walkthrough +
+# the npm 11.5 / Node 24 gotcha that requires the version pinned below.
 
 name: Publish
 
 on:
+  workflow_dispatch:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+  id-token: write   # required for OIDC trusted publishing + provenance
+
 jobs:
   publish:
+    name: publish to NPM
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write   # required for OIDC handshake with npm
+    timeout-minutes: 10
+    # Binds the job to the `npm-publish` GitHub Environment. The OIDC
+    # token's `environment` claim must match the saved Trusted Publisher
+    # config (both "npm-publish").
+    environment: npm-publish
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          # Node 24 LTS ships npm 11.x. Trusted Publishing requires
+          # npm >= 11.5; Node 22's npm 10.9.7 silently 404s the publish
+          # handshake (provenance signs but auth falls through to no-auth).
+          # See playbook §"E404 on every publish — npm version too old".
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
           cache: npm
-      - run: npm ci --legacy-peer-deps
-      - run: npx tsc --noEmit
-      - run: npx jest
-      # Diagnostic: dump the public claims of the OIDC token GitHub will hand
-      # to npm. These are the exact values npm matches against the Trusted
-      # Publisher trust policy. If publish 404s, compare what's logged here
-      # against what's configured at:
-      #   https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax/access
-      # The token itself is never printed — only the decoded claim values.
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npx jest
+
+      # Diagnostic: dump the public claims of the OIDC token GitHub will
+      # hand to npm. Compare against the Trusted Publisher config if
+      # publish 404s. The token itself is never printed.
       - name: Inspect OIDC claims (debug Trusted Publishing)
         uses: actions/github-script@v7
         with:
@@ -74,11 +87,12 @@ jobs:
             };
             await core.summary
               .addHeading('OIDC claims sent to npm')
-              .addRaw('These are the public claims of the OIDC token npm uses to validate the Trusted Publisher trust policy. Compare each value against the Trusted Publisher configuration on the package access page.\n')
+              .addRaw('Public claims of the OIDC token npm uses to validate the Trusted Publisher trust policy.\n')
               .addCodeBlock(JSON.stringify(fields, null, 2), 'json')
               .write();
             for (const [k, v] of Object.entries(fields)) {
               core.info(`${k.padEnd(18)}= ${v}`);
             }
-      - name: Publish to npm (Trusted Publishing)
+
+      - name: Publish (trusted publishing + provenance)
         run: npm publish --access public --provenance
