@@ -6,6 +6,58 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-14
+
+Drop the embedded `OpenSalesTaxClient` in favor of the standalone
+`@ejosterberg/opensalestax` SDK (v0.1.0+). Constitution §6 /
+playbook trigger.
+
+No merchant-facing behavior change for the provider. The HTTP wire
+contract with the OpenSalesTax engine is identical; only the
+package boundary between the Medusa plugin and the HTTP client
+moves.
+
+### Changed
+- Depend on `@ejosterberg/opensalestax@^0.1.0` instead of the
+  embedded `src/providers/opensalestax/client.ts`.
+- Pass `allowPrivate: true` to the SDK client — Medusa
+  deployments commonly run the engine on the same private
+  network. The SDK's SSRF defense is off by default for this
+  deployment shape.
+- Property accesses moved to the SDK's camelCase TS surface:
+  `jurisdiction.rate_pct` → `jurisdiction.ratePct`.
+- Internal `CalculateRequest` / `CalculateResponse` /
+  `CalculateLineItem` types replaced by SDK equivalents
+  (`Address`, `LineItem`, `CalculationResult`).
+- Error class rename: `OpenSalesTaxApiError` (with `.status`) →
+  `OpenSalesTaxAPIError` (with `.statusCode`). The provider now
+  catches both `OpenSalesTaxAPIError` and `OpenSalesTaxNetworkError`
+  for fail-soft behavior.
+- `src/providers/opensalestax/index.ts` re-exports the SDK's
+  public surface (`OpenSalesTaxClient`, `OpenSalesTaxAPIError`,
+  `OpenSalesTaxNetworkError`, `Address`, `LineItem`,
+  `CalculationResult`, etc.) so downstream code that imported
+  these from the plugin keeps working with one rename.
+
+### Removed
+- `src/providers/opensalestax/client.ts` (now lives in
+  `@ejosterberg/opensalestax`).
+
+### Migration
+
+For most Medusa stores: nothing to do. The provider's public
+interface (`@ejosterberg/medusa-plugin-opensalestax/providers/opensalestax`)
+is unchanged.
+
+If your code imported the error class from this plugin:
+
+```diff
+-import { OpenSalesTaxApiError } from '@ejosterberg/medusa-plugin-opensalestax';
++import { OpenSalesTaxAPIError } from '@ejosterberg/medusa-plugin-opensalestax';
+-} catch (e: OpenSalesTaxApiError) { console.log(e.status); }
++} catch (e: OpenSalesTaxAPIError) { console.log(e.statusCode); }
+```
+
 ## [0.2.0] — 2026-05-05
 
 ### Added

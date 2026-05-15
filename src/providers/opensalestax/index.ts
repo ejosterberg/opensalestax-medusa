@@ -9,12 +9,23 @@ export default ModuleProvider(Modules.TAX, {
 
 export { OpenSalesTaxProvider } from './service';
 export type { OpenSalesTaxProviderOptions } from './service';
-export { OpenSalesTaxClient, OpenSalesTaxApiError } from './client';
+
+// Re-export the SDK's public surface so downstream consumers of this
+// connector can import shared types without an explicit
+// `@ejosterberg/opensalestax` dependency. Names mirror the SDK as of
+// v0.1.0; the old `CalculateRequest` / `CalculateResponse` /
+// `CalculateLineItem` from the v0.1.x embedded client have been
+// replaced by `Address` / `LineItem` / `CalculationResult`.
+export {
+  OpenSalesTaxClient,
+  OpenSalesTaxAPIError,
+  OpenSalesTaxNetworkError,
+} from '@ejosterberg/opensalestax';
 export type {
-  OpenSalesTaxClientOptions,
-  CalculateRequest,
-  CalculateResponse,
+  Address,
   CalculatedLine,
-  CalculateLineItem,
+  CalculationResult,
   JurisdictionRate,
-} from './client';
+  LineItem,
+  OpenSalesTaxClientOptions,
+} from '@ejosterberg/opensalestax';

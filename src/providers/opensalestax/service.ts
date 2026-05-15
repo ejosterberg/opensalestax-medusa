@@ -13,8 +13,18 @@ import type {
   ShippingTaxLineDTO,
 } from '@medusajs/framework/types';
 
-import { OpenSalesTaxClient, OpenSalesTaxApiError } from './client';
-import type { CalculatedLine, CalculateRequest, CalculateResponse, JurisdictionRate } from './client';
+import {
+  OpenSalesTaxClient,
+  OpenSalesTaxAPIError,
+  OpenSalesTaxNetworkError,
+} from '@ejosterberg/opensalestax';
+import type {
+  Address,
+  CalculatedLine,
+  CalculationResult,
+  JurisdictionRate,
+  LineItem,
+} from '@ejosterberg/opensalestax';
 
 /**
  * Plugin options as passed via medusa-config.ts.
@@ -144,8 +154,12 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     };
     this.client = new OpenSalesTaxClient({
       baseUrl: this.options.apiBaseUrl,
-      apiKey: this.options.apiKey,
+      apiKey: this.options.apiKey ?? null,
       timeoutMs: this.options.timeoutMs,
+      // Medusa deployments commonly run the engine on the same
+      // private network (Docker compose, K8s). The SDK's SSRF
+      // defense is off by default for this deployment shape.
+      allowPrivate: true,
     });
   }
 
@@ -189,10 +203,11 @@ export class OpenSalesTaxProvider implements ITaxProvider {
       return [];
     }
 
-    const request: CalculateRequest = {
-      address: { zip5 },
-      line_items: taxable.map((t) => ({ amount: t.amountStr, category: t.category })),
-    };
+    const ostAddress: Address = { zip5 };
+    const lineItems: LineItem[] = taxable.map((t) => ({
+      amount: t.amountStr,
+      category: t.category,
+    }));
 
     // Try cache first.
     const cacheKey = OpenSalesTaxProvider.buildCacheKey(zip5, taxable);
@@ -201,11 +216,14 @@ export class OpenSalesTaxProvider implements ITaxProvider {
       return OpenSalesTaxProvider.mapResponseToTaxLines(cached.lines, taxable);
     }
 
-    let response: CalculateResponse;
+    let response: CalculationResult;
     try {
-      response = await this.client.calculate(request);
+      response = await this.client.calculate(ostAddress, lineItems);
     } catch (err) {
-      const message = err instanceof OpenSalesTaxApiError ? err.message : String(err);
+      const message =
+        err instanceof OpenSalesTaxAPIError || err instanceof OpenSalesTaxNetworkError
+          ? err.message
+          : String(err);
       this.logger?.error?.(`[opensalestax] calculate failed: ${message}`);
       // Return [] — Medusa surfaces thrown errors to the customer mid-checkout.
       return [];
@@ -330,7 +348,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
   }
 
   static jurisdictionToTaxLine(j: JurisdictionRate, entry: TaxableEntry): ItemTaxLineDTO | ShippingTaxLineDTO {
-    const ratePct = parseFloat(j.rate_pct);
+    const ratePct = parseFloat(j.ratePct);
     const base = {
       // Medusa's `rate` is a percentage (9.75 = 9.75%, NOT 0.0975).
       rate: Number.isFinite(ratePct) ? ratePct : 0,
@@ -367,12 +385,12 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     return `${CACHE_KEY_PREFIX}:${zip5}:${hash}`;
   }
 
-  private async cacheGet(key: string): Promise<CalculateResponse | null> {
+  private async cacheGet(key: string): Promise<CalculationResult | null> {
     if (!this.cache || this.options.cacheTtlSeconds <= 0) {
       return null;
     }
     try {
-      const got = await this.cache.get<CalculateResponse>(key);
+      const got = await this.cache.get<CalculationResult>(key);
       return got ?? null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -381,7 +399,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     }
   }
 
-  private async cacheSet(key: string, value: CalculateResponse): Promise<void> {
+  private async cacheSet(key: string, value: CalculationResult): Promise<void> {
     if (!this.cache || this.options.cacheTtlSeconds <= 0) {
       return;
     }

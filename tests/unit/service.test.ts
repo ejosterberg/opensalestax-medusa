@@ -180,7 +180,7 @@ describe('OpenSalesTaxProvider', () => {
   describe('jurisdictionToTaxLine', () => {
     it('maps an engine jurisdiction to a Medusa ItemTaxLineDTO with correct percentage rate', () => {
       const line = OpenSalesTaxProvider.jurisdictionToTaxLine(
-        { type: 'state', name: 'Minnesota', rate_pct: '6.875', tax: '6.8750' },
+        { type: 'state', name: 'Minnesota', ratePct: '6.875', tax: '6.8750' },
         { kind: 'item', medusaId: 'li_42', category: 'general', amountStr: '100.00' },
       );
 
@@ -194,7 +194,7 @@ describe('OpenSalesTaxProvider', () => {
 
     it('maps to a ShippingTaxLineDTO when entry kind is shipping', () => {
       const line = OpenSalesTaxProvider.jurisdictionToTaxLine(
-        { type: 'state', name: 'Minnesota', rate_pct: '6.875', tax: '0.6875' },
+        { type: 'state', name: 'Minnesota', ratePct: '6.875', tax: '0.6875' },
         { kind: 'shipping', medusaId: 'sl_99', category: 'general', amountStr: '10.00' },
       );
 
@@ -205,7 +205,7 @@ describe('OpenSalesTaxProvider', () => {
 
     it('slugifies multi-word jurisdictions', () => {
       const line = OpenSalesTaxProvider.jurisdictionToTaxLine(
-        { type: 'district', name: 'Hennepin County Transit Sales Tax', rate_pct: '0.500', tax: '0.5000' },
+        { type: 'district', name: 'Hennepin County Transit Sales Tax', ratePct: '0.500', tax: '0.5000' },
         { kind: 'item', medusaId: 'li_1', category: 'general', amountStr: '100.00' },
       );
       expect(line.code).toBe('OST-DISTRICT-hennepin-county-transit-sales-tax');
