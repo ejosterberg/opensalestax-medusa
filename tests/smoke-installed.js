@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
 
 // Smoke test for the installed @ejosterberg/medusa-plugin-opensalestax in
 // a real Medusa app's node_modules. Run from the Medusa app's working

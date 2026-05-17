@@ -28,9 +28,9 @@ npx ts-node tests/smoke-engine.ts  # OPTIONAL — needs an OpenSalesTax engine r
 - No top-level `await`. The plugin's published bundle is CJS via `medusa plugin:build`.
 - No new runtime dependencies without a strong reason. Built-in `fetch` (Node 20+) replaces axios / node-fetch.
 - Defaults to no comments. Add one only when the WHY is non-obvious.
-- Apache 2.0 + SPDX header on every source file:
+- Dual-licensed Apache-2.0 OR GPL-2.0-or-later + SPDX header on every source file:
   ```ts
-  // SPDX-License-Identifier: Apache-2.0
+  // SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
   ```
 
 ## Reporting

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
 #
 # Publishes the Medusa tax provider plugin to NPM on tag push.
 #
@@ -8,14 +8,14 @@
 #
 # Setup (one-time, configure on npm AFTER the first manual publish):
 #   1. https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax/access
-#      → Trusted Publisher → Add → GitHub Actions
+#      â†’ Trusted Publisher â†’ Add â†’ GitHub Actions
 #        Organization or user: ejosterberg
 #        Repository:           opensalestax-medusa
 #        Workflow filename:    publish.yml
 #        Environment name:     npm-publish
 #   2. GitHub Environment:
 #      https://github.com/ejosterberg/opensalestax-medusa/settings/environments
-#      New environment → name: npm-publish (no protection rules required)
+#      New environment â†’ name: npm-publish (no protection rules required)
 #
 # See ~/.claude/npm-trusted-publishing-playbook.md for setup walkthrough +
 # the npm 11.5 / Node 24 gotcha that requires the version pinned below.
@@ -48,7 +48,7 @@ jobs:
           # Node 24 LTS ships npm 11.x. Trusted Publishing requires
           # npm >= 11.5; Node 22's npm 10.9.7 silently 404s the publish
           # handshake (provenance signs but auth falls through to no-auth).
-          # See playbook §"E404 on every publish — npm version too old".
+          # See playbook Â§"E404 on every publish â€” npm version too old".
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           cache: npm

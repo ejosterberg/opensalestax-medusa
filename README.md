@@ -2,7 +2,7 @@
 
 > Replace TaxJar / Avalara with self-hosted [OpenSalesTax](https://github.com/ejosterberg/open-sales-tax). Free, open-source, US sales-tax calculation for Medusa v2.
 
-[![npm](https://img.shields.io/npm/v/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![npm downloads](https://img.shields.io/npm/dm/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE) [![Medusa](https://img.shields.io/badge/medusa-v2.13%2B-purple)](package.json) [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](package.json)
+[![npm](https://img.shields.io/npm/v/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![npm downloads](https://img.shields.io/npm/dm/@ejosterberg/medusa-plugin-opensalestax.svg)](https://www.npmjs.com/package/@ejosterberg/medusa-plugin-opensalestax) [![License](https://img.shields.io/badge/license-Apache%202.0%20OR%20GPL%202.0--or--later-blue)](LICENSE) [![Medusa](https://img.shields.io/badge/medusa-v2.13%2B-purple)](package.json) [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](package.json)
 
 **Status:** v0.2.0. Tested against Medusa v2.14.2 + OpenSalesTax engine v0.54. **30 unit tests** + live smoke test + live Medusa integration test on a Proxmox VM. v0.2 adds **caching** (~1600x faster on repeat calls during checkout) and **shipping-line tax** (default `general` category, configurable, opt-out-able).
 
@@ -147,8 +147,8 @@ You should monitor your engine's uptime independently. The companion engine proj
 - **17 unit tests** covering construction, ZIP extraction, unit-amount computation, jurisdiction-to-tax-line mapping, the happy path, country/currency/ZIP gates, fail-soft on engine errors, and category mapping
 - **Live-engine smoke test** confirms 6 jurisdictions returned for ZIP 55401 / $100 with sum-of-rates = 9.025%
 - **TypeScript strict mode** + `noUnusedLocals` + `noUnusedParameters`
-- **Apache 2.0 license**
+- **Dual-licensed Apache 2.0 OR GPL-2.0-or-later**
 
 ## License
 
-[Apache 2.0](LICENSE).
+Dual-licensed under your choice of [Apache-2.0](LICENSE-APACHE.txt) OR [GPL-2.0-or-later](LICENSE-GPL.txt). See [LICENSE](LICENSE).

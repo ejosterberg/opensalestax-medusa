@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
 
 /**
  * One-off smoke test against the live OpenSalesTax engine on Eric's lab.
- * Not part of the unit suite — run manually:
+ * Not part of the unit suite â€” run manually:
  *   npx ts-node tests/smoke-engine.ts
  *
  * Purpose: verify the HTTP client's fetch path actually round-trips against

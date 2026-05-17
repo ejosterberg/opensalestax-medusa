@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
 
 import { OpenSalesTaxProvider } from '../../src/providers/opensalestax/service';
 import type {
@@ -75,7 +75,7 @@ const makeFakeCache = (): ICacheService & { _store: Map<string, unknown>; _gets:
   return cache;
 };
 
-// Stub the global fetch — Medusa providers run on Node 20+ where fetch is built in.
+// Stub the global fetch â€” Medusa providers run on Node 20+ where fetch is built in.
 const originalFetch = global.fetch;
 afterEach(() => {
   global.fetch = originalFetch;
@@ -213,14 +213,14 @@ describe('OpenSalesTaxProvider', () => {
   });
 
   describe('getTaxLines', () => {
-    it('returns one tax line per (item × jurisdiction) on the happy path', async () => {
+    it('returns one tax line per (item Ã— jurisdiction) on the happy path', async () => {
       const fetchMock = stubFetchOk(SAMPLE_RESPONSE);
       const provider = new OpenSalesTaxProvider({ logger: fakeLogger }, { apiBaseUrl: 'http://stub' });
 
       const result = await provider.getTaxLines([baseItemLine()], [], baseContext());
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      // 1 item × 3 jurisdictions in SAMPLE_RESPONSE
+      // 1 item Ã— 3 jurisdictions in SAMPLE_RESPONSE
       expect(result).toHaveLength(3);
       expect(result[0]).toMatchObject({
         line_item_id: 'li_1',
@@ -319,7 +319,7 @@ describe('OpenSalesTaxProvider', () => {
         [
           baseItemLine({ id: 'li_clothing', productTypeId: 'ptyp_clothing' }),
           baseItemLine({ id: 'li_gift', productTypeId: 'ptyp_giftcards' }), // skip
-          baseItemLine({ id: 'li_other', productTypeId: 'ptyp_other' }), // default → general
+          baseItemLine({ id: 'li_other', productTypeId: 'ptyp_other' }), // default â†’ general
         ],
         [],
         baseContext(),
@@ -375,7 +375,7 @@ describe('OpenSalesTaxProvider', () => {
         subtotal: '110.00',
         tax_total: '9.93',
         disclaimer: '',
-        // 2 lines in / 2 lines out — order matches the request order
+        // 2 lines in / 2 lines out â€” order matches the request order
         lines: [
           { amount: '100.00', category: 'general', tax: '9.025', rate_pct: '9.025', jurisdictions: [
             { type: 'state', name: 'Minnesota', rate_pct: '6.875', tax: '6.8750' },
@@ -398,7 +398,7 @@ describe('OpenSalesTaxProvider', () => {
       expect(body.line_items[0]).toMatchObject({ amount: '100.00', category: 'general' });
       expect(body.line_items[1]).toMatchObject({ amount: '10.00', category: 'general' });
 
-      // 2 returned tax lines: 1 item × 1 jurisdiction + 1 shipping × 1 jurisdiction
+      // 2 returned tax lines: 1 item Ã— 1 jurisdiction + 1 shipping Ã— 1 jurisdiction
       expect(result).toHaveLength(2);
       const itemLine = result.find((l) => 'line_item_id' in l);
       const shippingLine = result.find((l) => 'shipping_line_id' in l);
@@ -572,7 +572,7 @@ describe('OpenSalesTaxProvider', () => {
 
     it('works correctly when no cache module is registered (no-op cache layer)', async () => {
       const fetchMock = stubFetchOk(sampleResponse);
-      // Note: no `cache` in deps — simulates a host without the Cache module.
+      // Note: no `cache` in deps â€” simulates a host without the Cache module.
       const provider = new OpenSalesTaxProvider(
         { logger: fakeLogger },
         { apiBaseUrl: 'http://stub' },

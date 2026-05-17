@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
 
 import { createHash } from 'node:crypto';
 
@@ -81,7 +81,7 @@ interface InjectedDeps {
   logger?: Logger;
   /**
    * Medusa's Cache module, registered as `cache` in the Awilix container
-   * (matches `Modules.CACHE`). Optional — if the host app hasn't configured
+   * (matches `Modules.CACHE`). Optional â€” if the host app hasn't configured
    * a cache module the provider degrades to no-cache (every call hits the
    * engine) but still functions correctly.
    */
@@ -97,7 +97,7 @@ type TaxableEntry =
  * OpenSalesTax tax provider for Medusa v2.
  *
  * Implements `ITaxProvider`. On every `getTaxLines` call, this provider:
- *   1. Filters US-only, USD-only line items (returns [] for anything else —
+ *   1. Filters US-only, USD-only line items (returns [] for anything else â€”
  *      the engine is destination-based US-only, USD-only by design).
  *   2. Maps Medusa's `product_type_id` to one of the OST engine's 6 tax
  *      categories via the `categoryByProductTypeId` option (with a
@@ -107,7 +107,7 @@ type TaxableEntry =
  *   4. Caches the engine response under a content-addressed key (60s TTL by
  *      default) so the typical "customer types ZIP, Medusa recomputes cart
  *      totals 5 times" pattern hits the engine once, not five times.
- *   5. Returns one tax line per (Medusa line × jurisdiction) so the order
+ *   5. Returns one tax line per (Medusa line Ã— jurisdiction) so the order
  *      summary shows the full state/county/city/district breakdown.
  *
  * Caching uses Medusa's `ICacheService` from the container under
@@ -172,13 +172,13 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     shippingLines: ShippingTaxCalculationLine[],
     context: TaxCalculationContext,
   ): Promise<(ItemTaxLineDTO | ShippingTaxLineDTO)[]> {
-    // Country gate — engine is US-only.
+    // Country gate â€” engine is US-only.
     const country = context.address?.country_code?.toUpperCase();
     if (country !== SUPPORTED_COUNTRY) {
       return [];
     }
 
-    // ZIP gate — engine needs a 5-digit US ZIP.
+    // ZIP gate â€” engine needs a 5-digit US ZIP.
     const zip5 = OpenSalesTaxProvider.extractZip5(context.address?.postal_code);
     if (zip5 === null) {
       return [];
@@ -225,7 +225,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
           ? err.message
           : String(err);
       this.logger?.error?.(`[opensalestax] calculate failed: ${message}`);
-      // Return [] — Medusa surfaces thrown errors to the customer mid-checkout.
+      // Return [] â€” Medusa surfaces thrown errors to the customer mid-checkout.
       return [];
     }
 
@@ -291,7 +291,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     if (typeof productTypeId === 'string' && productTypeId in map) {
       const mapped = map[productTypeId];
       if (typeof mapped === 'string') {
-        // Empty string is allowed (means "skip this line — non-taxable").
+        // Empty string is allowed (means "skip this line â€” non-taxable").
         if (mapped === '' || VALID_CATEGORIES.has(mapped)) {
           return mapped;
         }
@@ -326,7 +326,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
 
   /**
    * Convert engine response lines into Medusa tax lines, one per
-   * (Medusa-line × jurisdiction). For shipping lines the DTO carries
+   * (Medusa-line Ã— jurisdiction). For shipping lines the DTO carries
    * `shipping_line_id`; for item lines, `line_item_id`.
    */
   static mapResponseToTaxLines(
@@ -363,7 +363,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
   }
 
   /**
-   * Content-address the cache key on (zip5 × ordered taxable entries).
+   * Content-address the cache key on (zip5 Ã— ordered taxable entries).
    * Any change to inputs produces a new key. Versioning prefix lets us
    * invalidate everything by bumping the prefix in a future release.
    */
