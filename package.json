@@ -1,6 +1,6 @@
 {
   "name": "@ejosterberg/medusa-plugin-opensalestax",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "OpenSalesTax tax provider for Medusa v2 — destination-based US sales tax via a self-hosted Apache 2.0 engine.",
   "license": "(Apache-2.0 OR GPL-2.0-or-later)",
   "author": {
@@ -50,6 +50,7 @@
     "@swc/jest": "^0.2.39",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.0.0",
+    "@types/react": "^18.3.28",
     "jest": "^29.7.0",
     "typescript": "^5.6.2"
   },

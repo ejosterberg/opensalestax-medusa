@@ -6,6 +6,40 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-05-19
+
+### Added
+
+- **Test Connection admin widget (CP-4).** New "OpenSalesTax" sidebar
+  entry in Medusa admin (`/app/opensalestax`) with a button that hits
+  the configured engine's `/v1/health` endpoint and displays the
+  response inline ("✓ Engine v0.59.0 reachable — database connected
+  (RTT 42 ms)" on success, "✗ OPENSALESTAX_URL is not set" or "✗ HTTP
+  500" on failure). Surfaces typo'd engine URLs + unreachable engines
+  at config time rather than at first checkout. Brings this connector
+  in line with WooCom v0.5, Vendure v1.3, and Saleor v1.0 which already
+  shipped this. Wired via:
+  - `src/api/admin/opensalestax/test-connection/route.ts` — Medusa
+    admin API route (auth-gated by Medusa's admin session middleware)
+    that proxies the request to the OpenSalesTax SDK's `healthCheck()`
+    against an engine client built from process env.
+  - `src/api/admin/opensalestax/test-connection/tester.ts` — pure
+    orchestration split out for unit-testability against a stub client.
+  - `src/admin/routes/opensalestax/page.tsx` — Medusa admin route
+    component (auto-mounted by the admin SDK from the directory name)
+    that renders the button + inline result.
+  - 5 unit tests on the tester exercising null-client, happy-path,
+    db-disconnected, HealthCheckFailure, and unexpected-throw shapes.
+- `@types/react@^18.3` devDep — required for the TSX admin component
+  to type-check under the existing `tsc --noEmit` lint script.
+
+### Changed
+
+- `tsconfig.json` — added `"jsx": "react-jsx"` and `"DOM"` to `lib` so
+  the lint script can type-check the new admin route. The `medusa
+  plugin:build` step that produces the published artifact handled JSX
+  fine already; only the standalone lint pipeline needed the bump.
+
 ## [0.4.0] — 2026-05-19
 
 ### Added
