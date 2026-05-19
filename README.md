@@ -69,6 +69,15 @@ module.exports = defineConfig({
               // Cache uses Medusa's ICacheService from the container.
               cacheTtlSeconds: 60,
 
+              // v0.4 (CP-3): per-state nexus filter. When non-empty,
+              // the provider short-circuits the engine call for carts
+              // shipping to states not in this list (returns [] —
+              // Medusa treats as "no tax"). Unset / empty array =
+              // engine called for every cart (v0.3 behavior).
+              // Accepts an array of 2-letter codes OR a comma-separated
+              // string (e.g. "MN,WI,IA") for env-var compatibility.
+              nexusStates: ["MN", "WI", "IA"],
+
               timeoutMs: 5000, // optional, default 5000
             },
           },
@@ -120,6 +129,10 @@ These are silent, fail-soft skips — no exceptions thrown, no checkout interrup
 If the engine is unreachable, returns 5xx, or times out, the provider logs the error and returns `[]`. **Returning empty means "no tax line"** — don't throw, since Medusa surfaces exceptions to the customer mid-checkout.
 
 You should monitor your engine's uptime independently. The companion engine project ships with a `/v1/health` endpoint and a Docker healthcheck.
+
+## What's new in v0.4.0
+
+- ✅ **Per-state nexus filter (CP-3).** New `nexusStates` provider option. Most US merchants only have nexus in a small set of states; without a filter, every cart goes through the engine even when the merchant has no obligation to collect for that destination. Setting `nexusStates: ["MN", "WI", "IA"]` short-circuits the engine for any other destination — no RTT, no spurious tax lines. Filter is opt-in: omit or pass `[]` and behavior is identical to v0.3. Brings Medusa in line with WooCom v0.5, Vendure v1.2, and Odoo v0.3.
 
 ## What's new in v0.2.0
 

@@ -45,6 +45,7 @@ import type {
  *       shippingCategory: "general",                   // v0.2: shipping category, "" to skip
  *       timeoutMs: 5000,                               // optional, default 5000
  *       cacheTtlSeconds: 60,                           // v0.2: cache TTL, 0 to disable
+ *       nexusStates: ["MN", "WI", "IA"],                // v0.4 (CP-3): per-state filter
  *     }
  *   }
  */
@@ -58,6 +59,19 @@ export interface OpenSalesTaxProviderOptions {
   timeoutMs?: number;
   /** v0.2: cache TTL in seconds. Default 60. Set to 0 to disable caching. */
   cacheTtlSeconds?: number;
+  /**
+   * v0.4 (CP-3): per-state nexus allowlist. Array of uppercase 2-letter
+   * US state codes (e.g. `["MN", "WI", "IA"]`). When set and non-empty,
+   * the provider short-circuits the engine call for any cart whose
+   * `address.province_code` is not in the list, returning `[]` (Medusa
+   * treats this as "no tax applies"). Unset / empty array preserves
+   * v0.3 behavior (engine called for every cart). Missing /
+   * unresolvable `province_code` with the filter active is fail-closed
+   * — the safer default for a merchant who explicitly opted in.
+   * Can also be passed as a comma-separated string for compatibility
+   * with env-var-style config (e.g. `"MN,WI,IA"`).
+   */
+  nexusStates?: string | string[];
 }
 
 /** Six categories the OpenSalesTax engine accepts. Empty string = non-taxable. */
@@ -129,9 +143,11 @@ export class OpenSalesTaxProvider implements ITaxProvider {
   private readonly logger: Logger | undefined;
   private readonly cache: ICacheService | undefined;
   private readonly client: OpenSalesTaxClient;
-  private readonly options: Required<Omit<OpenSalesTaxProviderOptions, 'apiKey' | 'categoryByProductTypeId'>> & {
+  private readonly options: Required<Omit<OpenSalesTaxProviderOptions, 'apiKey' | 'categoryByProductTypeId' | 'nexusStates'>> & {
     apiKey?: string;
     categoryByProductTypeId: Record<string, string>;
+    /** Normalized to a frozen Set of upper-case 2-letter codes; empty = filter disabled. */
+    nexusStates: ReadonlySet<string>;
   };
 
   constructor(deps: InjectedDeps, options: OpenSalesTaxProviderOptions) {
@@ -151,6 +167,7 @@ export class OpenSalesTaxProvider implements ITaxProvider {
       shippingCategory: options.shippingCategory ?? DEFAULT_SHIPPING_CATEGORY,
       timeoutMs: options.timeoutMs ?? 5000,
       cacheTtlSeconds: options.cacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS,
+      nexusStates: OpenSalesTaxProvider.normalizeNexusStates(options.nexusStates),
     };
     this.client = new OpenSalesTaxClient({
       baseUrl: this.options.apiBaseUrl,
@@ -182,6 +199,24 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     const zip5 = OpenSalesTaxProvider.extractZip5(context.address?.postal_code);
     if (zip5 === null) {
       return [];
+    }
+
+    // Per-state nexus filter (CP-3, v0.4). When the merchant has set
+    // `nexusStates`, short-circuit any cart whose ship-to state isn't
+    // in the allowlist. Medusa's `province_code` is lower-case
+    // ISO 3166-2 (e.g. "mn"); we upper-case for comparison.
+    // Unresolvable state with the filter active is fail-closed.
+    if (this.options.nexusStates.size > 0) {
+      const raw = context.address?.province_code ?? '';
+      const state = raw.trim().toUpperCase();
+      if (state === '' || !this.options.nexusStates.has(state)) {
+        this.logger?.debug?.(
+          `[opensalestax] nexus-filter: skipping engine call for state ` +
+            `${state === '' ? '(unresolvable)' : state} ` +
+            `— not in nexus list [${[...this.options.nexusStates].sort().join(',')}]`,
+        );
+        return [];
+      }
     }
 
     // Build the engine payload across BOTH item lines and shipping lines.
@@ -241,6 +276,25 @@ export class OpenSalesTaxProvider implements ITaxProvider {
     }
     const digits = postalCode.replace(/\D/g, '');
     return digits.length >= 5 ? digits.slice(0, 5) : null;
+  }
+
+  /**
+   * Normalize the `nexusStates` option (string or string[]) into a frozen
+   * Set of upper-case 2-letter US state codes. Accepts comma- /
+   * whitespace-separated strings (env-var style), arrays of codes
+   * (declarative style), or undefined. Malformed tokens drop silently.
+   */
+  static normalizeNexusStates(raw: string | string[] | undefined): ReadonlySet<string> {
+    if (raw === undefined) return Object.freeze(new Set<string>());
+    const tokens: string[] = Array.isArray(raw) ? raw : raw.split(/[\s,]+/);
+    const out = new Set<string>();
+    for (const tok of tokens) {
+      if (typeof tok !== 'string') continue;
+      const upper = tok.trim().toUpperCase();
+      if (/^[A-Z]{2}$/.test(upper)) out.add(upper);
+    }
+    Object.freeze(out);
+    return out;
   }
 
   private resolveItemEntry(line: ItemTaxCalculationLine): TaxableEntry | null {

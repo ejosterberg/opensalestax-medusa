@@ -622,4 +622,127 @@ describe('OpenSalesTaxProvider', () => {
       expect(fakeLogger?.warn).toHaveBeenCalledWith(expect.stringContaining('cache.set failed'));
     });
   });
+
+  describe('normalizeNexusStates (CP-3, v0.4)', () => {
+    it('returns empty set for undefined', () => {
+      expect(OpenSalesTaxProvider.normalizeNexusStates(undefined).size).toBe(0);
+    });
+
+    it('parses comma-separated string', () => {
+      const set = OpenSalesTaxProvider.normalizeNexusStates('MN,WI,IA');
+      expect([...set].sort()).toEqual(['IA', 'MN', 'WI']);
+    });
+
+    it('accepts an array of codes', () => {
+      const set = OpenSalesTaxProvider.normalizeNexusStates(['MN', 'WI', 'IA']);
+      expect([...set].sort()).toEqual(['IA', 'MN', 'WI']);
+    });
+
+    it('normalizes lower-case + extra whitespace', () => {
+      const set = OpenSalesTaxProvider.normalizeNexusStates(' mn , Wi  IA ');
+      expect([...set].sort()).toEqual(['IA', 'MN', 'WI']);
+    });
+
+    it('drops malformed tokens silently', () => {
+      const set = OpenSalesTaxProvider.normalizeNexusStates(['MN', 'Minnesota', '12', '', 'wi']);
+      expect([...set].sort()).toEqual(['MN', 'WI']);
+    });
+
+    it('returns a frozen set', () => {
+      expect(Object.isFrozen(OpenSalesTaxProvider.normalizeNexusStates(['MN']))).toBe(true);
+    });
+  });
+
+  describe('per-state nexus filter (CP-3, v0.4)', () => {
+    const sampleResponse = {
+      subtotal: '100.00',
+      tax_total: '9.025',
+      disclaimer: '',
+      lines: [{ amount: '100.00', category: 'general', tax: '9.025', rate_pct: '9.025', jurisdictions: [
+        { type: 'state', name: 'Minnesota', rate_pct: '6.875', tax: '6.8750' },
+      ]}],
+    };
+
+    it('calls engine when nexusStates option is omitted (filter disabled)', async () => {
+      const fetchMock = stubFetchOk(sampleResponse);
+      const provider = new OpenSalesTaxProvider({ logger: fakeLogger }, { apiBaseUrl: 'http://stub' });
+      const result = await provider.getTaxLines([baseItemLine()], [], baseContext());
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('calls engine when nexusStates is empty array (filter disabled)', async () => {
+      const fetchMock = stubFetchOk(sampleResponse);
+      const provider = new OpenSalesTaxProvider(
+        { logger: fakeLogger },
+        { apiBaseUrl: 'http://stub', nexusStates: [] },
+      );
+      const result = await provider.getTaxLines([baseItemLine()], [], baseContext());
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('calls engine when destination state IS in nexus list', async () => {
+      const fetchMock = stubFetchOk(sampleResponse);
+      const provider = new OpenSalesTaxProvider(
+        { logger: fakeLogger },
+        { apiBaseUrl: 'http://stub', nexusStates: ['MN', 'WI'] },
+      );
+      const result = await provider.getTaxLines([baseItemLine()], [], baseContext());
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('short-circuits engine when destination state NOT in nexus list', async () => {
+      const fetchMock = stubFetchThrows(new Error('should not be called'));
+      const provider = new OpenSalesTaxProvider(
+        { logger: fakeLogger },
+        { apiBaseUrl: 'http://stub', nexusStates: ['MN', 'WI'] },
+      );
+      const ctx: TaxCalculationContext = {
+        address: { country_code: 'US', province_code: 'ca', postal_code: '94016' },
+      };
+      const result = await provider.getTaxLines([baseItemLine()], [], ctx);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+
+    it('fail-closed when province_code is missing AND filter is active', async () => {
+      const fetchMock = stubFetchThrows(new Error('should not be called'));
+      const provider = new OpenSalesTaxProvider(
+        { logger: fakeLogger },
+        { apiBaseUrl: 'http://stub', nexusStates: ['MN', 'WI'] },
+      );
+      const ctx: TaxCalculationContext = {
+        address: { country_code: 'US', postal_code: '55401' },
+      };
+      const result = await provider.getTaxLines([baseItemLine()], [], ctx);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+
+    it('matches case-insensitively (Medusa province_code is lower-case)', async () => {
+      const fetchMock = stubFetchOk(sampleResponse);
+      const provider = new OpenSalesTaxProvider(
+        { logger: fakeLogger },
+        { apiBaseUrl: 'http://stub', nexusStates: ['MN'] },
+      );
+      // baseContext uses province_code: 'mn' (lower case)
+      const result = await provider.getTaxLines([baseItemLine()], [], baseContext());
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('accepts a comma-separated string (env-var compatibility)', async () => {
+      const fetchMock = stubFetchThrows(new Error('should not be called'));
+      const provider = new OpenSalesTaxProvider(
+        { logger: fakeLogger },
+        { apiBaseUrl: 'http://stub', nexusStates: 'wi,ia' },
+      );
+      // baseContext is MN — not in {WI, IA}
+      const result = await provider.getTaxLines([baseItemLine()], [], baseContext());
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+  });
 });

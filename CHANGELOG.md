@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-19
+
+### Added
+
+- **Per-state nexus filter (CP-3).** New `nexusStates` provider option
+  accepts an array of US 2-letter state codes (e.g. `["MN", "WI", "IA"]`)
+  or a comma-separated string. When set and non-empty, the provider
+  short-circuits the engine call for any cart whose `address.province_code`
+  is not in the list, returning `[]` (Medusa treats this as "no tax
+  applies"). Unset / empty preserves v0.3 behavior (engine called for
+  every cart). Missing / unresolvable `province_code` with the filter
+  active is fail-closed — the safer default for a merchant who explicitly
+  opted in. Brings this connector in line with WooCommerce v0.5, Vendure
+  v1.2, and Odoo v0.3, which already shipped this filter. Major win for
+  merchants with limited nexus footprints — typical merchant only has
+  1–3 nexus states and was previously paying engine RTT on every cart.
+  Resolves improvement-queue item M-2.
+
 ## [0.3.1] — 2026-05-17
 
 ### Changed
