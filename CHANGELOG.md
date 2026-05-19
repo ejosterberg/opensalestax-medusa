@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-05-19
+
+### Changed
+
+- **CP-9: bumped `@ejosterberg/opensalestax` constraint from `^0.2.0` to
+  `^0.3.0`.** Picks up the new third arg on `client.calculate(addr, lines,
+  shipping?)` plus the `CalculationResult.shipping` /
+  `CalculationResult.coverageWarning` response fields, and the
+  `ShippingInput` / `CalculatedShipping` types. No merchant-visible
+  behavior change in this release — the existing flow continues to send
+  shipping lines through `lineItems` with a configurable category
+  (which works correctly for most cases). A future minor release will
+  evaluate converting shipping to the engine's first-class `shipping`
+  field to unlock per-state shipping-taxability rules (MN
+  "tax-if-items-taxable", MO/VA "separately-stated", MD
+  "shipping-vs-handling").
+
+### Notes
+
+- Engine v0.59.0+ recommended. Older engines silently ignore the
+  unused fields; the existing item + shipping-as-line-item flow is
+  unaffected.
+
 ## [0.4.2] — 2026-05-19
 
 ### Changed
