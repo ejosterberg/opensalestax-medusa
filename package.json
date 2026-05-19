@@ -41,11 +41,11 @@
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
-    "@medusajs/admin-sdk": "2.14.2",
-    "@medusajs/cli": "2.14.2",
-    "@medusajs/framework": "2.14.2",
-    "@medusajs/medusa": "2.14.2",
-    "@medusajs/test-utils": "2.14.2",
+    "@medusajs/admin-sdk": "2.15.2",
+    "@medusajs/cli": "2.15.2",
+    "@medusajs/framework": "2.15.2",
+    "@medusajs/medusa": "2.15.2",
+    "@medusajs/test-utils": "2.15.2",
     "@swc/core": "^1.7.28",
     "@swc/jest": "^0.2.39",
     "@types/jest": "^29.5.12",
