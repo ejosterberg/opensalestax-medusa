@@ -6,6 +6,16 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-05-19
+
+### Fixed
+
+- **`npm ci` lockfile mismatch on v0.4.3 publish workflow.** v0.4.3
+  bumped `@ejosterberg/opensalestax` from `^0.2.0` to `^0.3.0` in
+  `package.json` but left `package-lock.json` pinned to `0.2.0`.
+  GitHub Actions `npm ci` correctly rejected the mismatch. v0.4.4
+  refreshes the lockfile via `npm install`. No code changes.
+
 ## [0.4.3] — 2026-05-19
 
 ### Changed
