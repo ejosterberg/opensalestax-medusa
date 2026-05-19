@@ -6,6 +6,17 @@ Versioning: [SemVer](https://semver.org).
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-05-19
+
+### Changed
+
+- **CP-8 Phase 5D: bumped `@ejosterberg/opensalestax` constraint to `^0.2.0`.**
+  Picks up the new `capabilities()` / `capabilitiesCached()` helpers for engine
+  v0.59.0's `/v1/capabilities` endpoint. No merchant-visible behavior change in
+  this release — the helper is available to connector code but not yet wired
+  into any feature path. Constraint bump only; Test Connection surface
+  enrichment deferred to v-next.
+
 ## [0.4.1] — 2026-05-19
 
 ### Added
